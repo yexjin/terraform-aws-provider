@@ -9,6 +9,7 @@ terraform {
     key = "terraform.tfstate"
     region = "us-east-1"
     encrypt = true
+    dynamodb_table = "lena-tfstate-bucket-lock"
   }
 }
 
@@ -29,3 +30,20 @@ resource "aws_s3_bucket_versioning" "versioning-ex" {
   }
 }
 
+# DynamoDB 추가하기
+resource "aws_dynamodb_table" "terraform_lock" {
+  name = "lena-tfstate-bucket-lock"
+  hash_key = "LockID"
+  read_capacity = 2
+  write_capacity = 2
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
+
+# ARN : 아마존 리소스 이름
+output "s3_bucket_arn" {
+  value = "${aws_s3_bucket.terraform_state.arn}"
+}
