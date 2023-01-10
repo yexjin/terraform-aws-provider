@@ -18,6 +18,8 @@ resource "aws_launch_configuration" "example"{
   instance_type = "t2.micro"
   security_groups = ["${aws_security_group.instance.id}"]
 
+  # EC2 인스턴스에 포트 번호를 설정하는 비지박스 부분
+  # - EC2 인스턴스의 사용자 데이터 설정을 통해 "Hello, World" 스크립트를 인스턴스 기동시 수행할 수 있게 된다.
   user_data = <<-EOF
 #!/bin/bash
 echo "Hello, World" > index.html
