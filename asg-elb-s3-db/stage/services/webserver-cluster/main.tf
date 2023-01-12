@@ -1,9 +1,20 @@
+# s3 bucket에 테라폼 상태 저장
+terraform {
+  backend "s3" {
+    bucket = "lena-tf-state-bucket"
+    key = "stage/services/webserver-cluster/terraform.tfstate"
+    region = "us-east-1"
+    encrypt = true
+    dynamodb_table = "lena-tf-state-bucket-lock"
+  }
+}
+
 provider "aws" {
-  region = "ap-northeast-2"
+  region = "us-east-1"
 }
 
 ## EC2 인스턴스를 ASG에 설정하는 시작 구성 ##
-resource "aws_launch_configuration" "example" {
+resource "aws_launch_configuration" "example"{
   image_id = "ami-40d28157"
   instance_type = "t2.micro"
   security_groups = ["${aws_security_group.elb.id}"]
@@ -12,7 +23,9 @@ resource "aws_launch_configuration" "example" {
   # - EC2 인스턴스의 사용자 데이터 설정을 통해 "Hello, World" 스크립트를 인스턴스 기동시 수행할 수 있게 된다.
   user_data = <<-EOF
 #!/bin/bash
-echo "Hello, World" > index.html
+echo "Hello, World" >> index.html
+echo "${data.terraform_remote_state.db.outputs.address}" >> index.html
+echo "${data.terraform_remote_state.db.outputs.port}" >> index.html
 nohup busybox httpd -f -p "${var.server_port}" &
 EOF
 
@@ -24,12 +37,19 @@ EOF
 
 ## 보안 그룹 설정 ##
 resource "aws_security_group" "elb" {
-  name = "terraform-example-instance"
+  name = "terraform-elb-instance"
 
   # 포트 80번 트래픽을 확인한 후, 연동
   ingress {
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # 인터넷이 연결된 어느곳에서라도 접속
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"] # 인터넷이 연결된 어느곳에서라도 접속
   }
@@ -66,16 +86,12 @@ resource "aws_autoscaling_group" "example" {
   }
 }
 
-## aws 가용영역 가져오기 ##
-data "aws_availability_zones" "all" {
-}
-
 ## ELB 생성 ##
 resource "aws_elb" "example" {
   name = "terraform-asg-example"
   availability_zones = "${data.aws_availability_zones.all.names}"
   # 기본적으로 들어오고 나가는 트래픽에 대해 허용하지 않게 하기 위해, 보안 그룹에 포트 80번 트래픽에 대해 정의해야 함.
-  security_groups = "${aws_security_group.elb.id}"
+  security_groups = ["${aws_security_group.elb.id}"]
 
   # 특정 포트에 대한 트래픽을 라우팅 하기 위해 하나 이상의 리스너를 설정
   listener {
@@ -95,3 +111,4 @@ resource "aws_elb" "example" {
     unhealthy_threshold = 2
   }
 }
+
