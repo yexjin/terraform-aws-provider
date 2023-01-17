@@ -14,11 +14,11 @@ provider "aws" {
 }
 
 ## 데이터 베이스 리소스 생성 ##
-module "mysql" {
-  source = "../../../modules/datastores/mysql"
-  db_allocated_storage = 10
-  db_instance_class = "db.t2.micro"
-  db_name = "prod_db"
-  db_password = var.db_password
-  db_username = "admin"
+resource "aws_db_instance" "example" {
+  engine = "mysql"
+  allocated_storage = 10
+  instance_class = "db.t2.micro"
+  db_name = "example_data"
+  username = "admin"
+  password = "${var.db_password}"
 }
