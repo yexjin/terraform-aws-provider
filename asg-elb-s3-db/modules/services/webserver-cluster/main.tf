@@ -1,18 +1,7 @@
-# s3 bucket에 테라폼 상태 저장
-terraform {
-  backend "s3" {
-    bucket = "lena-tf-state-bucket"
-    key = "stage/services/webserver-cluster/terraform.tfstate"
-    region = "us-east-1"
-    encrypt = true
-    dynamodb_table = "lena-tf-state-bucket-lock"
-  }
-}
-
 ## EC2 인스턴스를 ASG에 설정하는 시작 구성 ##
 resource "aws_launch_configuration" "example"{
   image_id = "ami-40d28157"
-  instance_type = "t2.micro"
+  instance_type = "${var.instance_type}"
   security_groups = ["${aws_security_group.elb.id}"]
 
   # EC2 인스턴스에 포트 번호를 설정하는 비지박스 부분
@@ -35,34 +24,32 @@ EOF
 resource "aws_security_group" "elb" {
   name = "${var.cluster_name}-instance"
 
-  # 포트 80번 트래픽을 확인한 후, 연동
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # 인터넷이 연결된 어느곳에서라도 접속
-  }
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # 인터넷이 연결된 어느곳에서라도 접속
-  }
-
-  # 상태체크를 요청하기 위해 내보내는 트래픽 허용
-  egress {
-    from_port = 0
-    protocol  = "-1"
-    to_port   = 0
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   # 설정 리소스와 관련된 리소스이기에 create_before_destroy = true
   lifecycle {
     create_before_destroy = true
   }
 }
+
+resource "aws_security_group_rule" "allow_http_inbound" {
+  type = "ingress"
+  security_group_id = "${aws_security_group.elb.id}"
+
+  from_port = 80
+  to_port = 80
+  protocol = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "allow_all_outbound" {
+  type = "egress"
+  security_group_id = "${aws_security_group.elb.id}"
+
+  from_port = 0
+  to_port = 0
+  protocol = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
 
 ## ASG 생성 ##
 resource "aws_autoscaling_group" "example" {
@@ -72,12 +59,12 @@ resource "aws_autoscaling_group" "example" {
   load_balancers = ["${aws_elb.example.name}"]  # 인스턴스가 시작할 때 ELB에 각 인스턴스를 등록하도록 ASG에 요청
   health_check_type = "ELB"
 
-  max_size = 10
-  min_size = 2
+  max_size = "${var.max_size}"
+  min_size = "${var.min_size}"
 
   tag {
     key = "Name"
-    value = "terraform-asg-example"
+    value = "${var.cluster_name}"
     propagate_at_launch =  true
   }
 }
